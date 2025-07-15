@@ -7,7 +7,6 @@ from scipy.spatial.distance import mahalanobis
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import StandardScaler
 
-
 data = pd.read_csv("data/01_marketing_campaign.csv", sep='\t')
 data.head()
 # let's do a basic statistics of the entire dataset to understand it better
@@ -16,7 +15,7 @@ data_statistics = data.describe()
 # remove NA values
 print(f"before removing missing values, we have {len(data)} data points")
 df = data.dropna().copy()
-print(f"after removing missing values, we have {len(data)} data points")
+print(f"after removing missing values, we have {len(df)} data points")
 
 # let's explore the categorical features
 df["Education"].value_counts()
@@ -200,11 +199,16 @@ sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", square=True)
 plt.title('Correlation Heatmap of All Features')
 plt.show()
 
+#JM-Apply scaling to variables conducive to scaling ONLY. For example, avoid scaling indicator variables
 # Standardize
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(df_clean)
+columns_to_avoid_scaling = ["Education","Marital_Status","Response"]
+columns_to_scale = [col for col in df_clean.columns if col not in columns_to_avoid_scaling]
+df_clean2 = df_clean.copy()
+df_clean2[columns_to_scale] = scaler.fit_transform(df_clean2[columns_to_scale])
+
+X_scaled = df_clean2.copy()
 
 # Optional: wrap back in a DataFrame for downstream use
 X_scaled_df = pd.DataFrame(X_scaled, columns=df_clean.columns, index=df_clean.index)
-
 X_scaled_df.to_csv("data/03_scaled_proprocessed_marketing_campaign.csv")
