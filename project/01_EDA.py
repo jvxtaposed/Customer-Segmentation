@@ -5,7 +5,18 @@ import numpy as np
 from scipy.stats import chi2
 from scipy.spatial.distance import mahalanobis
 from sklearn.feature_selection import VarianceThreshold
+from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+import pandas as pd
+import matplotlib.pyplot as plot
+from sklearn import manifold
+from sklearn.manifold import Isomap
+from sklearn.cluster import AgglomerativeClustering
+import plotly.express as px
+# plt.switch_backend('agg')
 
 data = pd.read_csv("data/01_marketing_campaign.csv", sep='\t')
 data.head()
@@ -210,5 +221,177 @@ df_clean2[columns_to_scale] = scaler.fit_transform(df_clean2[columns_to_scale])
 X_scaled = df_clean2.copy()
 
 # Optional: wrap back in a DataFrame for downstream use
-X_scaled_df = pd.DataFrame(X_scaled, columns=df_clean.columns, index=df_clean.index)
+#X_scaled_df = pd.DataFrame(X_scaled, columns=df_clean.columns, index=df_clean.index)
+X_scaled_df = pd.DataFrame(scaler.fit_transform(df_clean), columns = df_clean.columns, index=df_clean.index)
 X_scaled_df.to_csv("data/03_scaled_proprocessed_marketing_campaign.csv")
+
+#visualize tsne data
+np.random.seed(6740)
+tsne = TSNE(n_components=2, random_state=6740)
+tsne_dat = tsne.fit_transform(X_scaled_df)
+plt.figure()
+plt.title("2-Level TSNE on Scaled Data")
+plt.scatter(tsne_dat[:,0], tsne_dat[:,1])
+plt.show()
+# plt.close()
+
+#2-dimensional PCA visualization
+pca = PCA(n_components=3)
+pca_dat = pd.DataFrame(pca.fit_transform(X_scaled_df), columns=['PC1', 'PC2', 'PC3'])
+plt.figure()
+plt.title("2-Level PCA on Scaled Data")
+plt.scatter(pca_dat['PC1'], pca_dat['PC2'])
+plt.show()
+
+#2-dimensional KMeans on first-two principles components
+kmeans = KMeans().fit(X_scaled_df)
+pca_kmeans = pca_dat.copy()
+pca_kmeans['cluster'] = pd.Categorical(kmeans.labels_)
+sns.scatterplot(x="PC1", y="PC2", hue='cluster', data=pca_kmeans)
+
+
+
+#view the 3-d projected PCA data
+plot.figure()
+axes=plot.axes(projection='3d')
+axes.scatter3D(pca_dat['PC1'], pca_dat['PC2'], pca_dat['PC3'])
+axes.title.set_text('3-Level PCA on Scaled Data')
+
+#3-dimensional KMeans clusters on first-three principles components
+plt.figure()
+fig = px.scatter_3d(pca_kmeans, x='PC1', y='PC2', z='PC3', color=pca_kmeans['cluster'].astype(str), title="3D KMeans Clusters on PCA Data")
+fig.show()
+
+#isomap plot
+iso=manifold.Isomap(n_neighbors=5, n_components=2)
+iso.fit(X_scaled_df)
+manifolded = iso.transform(X_scaled_df)
+manifolded_df = pd.DataFrame(manifolded, columns=['Component_1',"Component_2"])
+plt.figure()
+plt.title("2-level Isomap on Scaled Data")
+plt.scatter(manifolded_df['Component_1'], manifolded_df['Component_2'])
+plt.show()
+
+
+#elbow plot on PCA components
+sse_kemeans = []
+for k in range(1,11):
+    kmeans=KMeans(n_clusters=k, init='k-means++', max_iter=100, n_init=10, random_state=6740)
+    kmeans.fit(pca_dat)
+    sse_kemeans.append(kmeans.inertia_)
+plt.figure()
+plt.plot(range(1,11), sse_kemeans)
+plt.xticks(range(1,11))
+plt.xlabel('Number of Clusters')
+plt.ylabel('Distortion')
+plt.title("Cluster Elbow Plot on Principle Components: KMeans")
+plt.show()
+
+#elbow plot on ISOMAP components - turned out to not be very helpful, need #n_clusters not #n_components
+# residuals = []
+# for d in range(1,11):
+#     isomap=manifold.Isomap(n_neighbors=10, n_components=d)
+#     iso_dat = isomap.fit_transform(X_scaled_df)
+#     dist = pairwise_distances(iso_dat)
+#     r = np.corrcoef(pairwise_distances(X_scaled_df).ravel(),pairwise_distances(iso_dat).ravel())[0,1]
+#     resid = 1 - r**2
+#     residuals.append(resid)
+# plt.figure()
+# plt.plot(range(1,11), residuals)
+# plt.xticks(range(1,11))
+# plt.xlabel('Number of Components')
+# plt.ylabel('Residual Variance')
+# plt.title("Components Elbow Plot on Components: ISOMAP")
+# plt.show()
+
+#agglomerative clustering approach, use the value of 5 from KMeans elbow-plot
+agc = AgglomerativeClustering(n_clusters=5)
+predicted_agc = agc.fit_predict(pca_dat)
+pca_agc = pca_dat.copy()
+pca_agc['cluster'] = predicted_agc
+
+#2d agglomerative
+plt.figure()
+sns.scatterplot(x="PC1", y="PC2", hue='cluster', data=pca_agc)
+
+#3d agglomerative clustering on 3-d PCA
+plt.figure()
+axes=plot.axes(projection='3d')
+axes.scatter3D(pca_agc['PC1'], pca_agc['PC2'], pca_agc['PC3'], c=pca_agc['cluster'])
+axes.title.set_text('3-Level PCA on Scaled Data')
+
+#plot how many respondents fall into each agglomerative cluster
+
+plt.figure()
+agc_counts = pd.Series(predicted_agc).value_counts().sort_index()
+# agc_counts.plot(kind='bar', c=pca_agc['cluster'])
+plt.bar(agc_counts.index, agc_counts.values)
+plt.title("Number of Customers Per Cluster - Agglomerative Clustering")
+plt.xlabel('Cluster')
+plt.ylabel('Number of Customers')
+
+#now plot 2-d, agglomerative clustering with UNSCALED data
+plt.figure()
+sns.scatterplot(data=df_clean, x='Total_Spent', y='Income', hue=pca_agc['cluster'],palette='tab10')
+plt.title("Agglomerative Clusters: Total Spending vs Income")
+
+# plt.figure()
+# sns.scatterplot(data=df_clean, x='Total_Spent', y='Customer_Since', hue=pca_agc['cluster'],palette='tab10')
+# plt.title("Agglomerative Clusters: Total Spending vs Income")
+#
+# plt.figure()
+# sns.scatterplot(data=df_clean, x='Total_Spent', y='Total_Web_Engagement', hue=pca_agc['cluster'],palette='tab10')
+# plt.title("Agglomerative Clusters: Total Spending vs Income")
+#
+# plt.figure()
+# sns.scatterplot(data=df_clean, x='Customer_Since', y='Recency', hue=pca_agc['cluster'],palette='tab10')
+# plt.title("Agglomerative Clusters: Total Spending vs Income")
+#
+# plt.figure()
+# sns.scatterplot(data=df_clean, x='Customer_Since', y='Recency', hue=pca_agc['cluster'],palette='tab10')
+# plt.title("Agglomerative Clusters: Total Spending vs Income")
+
+#Apply box-plot of spending by cluster to get a feel for cluster-behavior
+plt.figure()
+plt.title("Agglomerative Clusters: Income")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['Income'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Total Spent")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['Total_Spent'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Total Purchases")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['Total_Purchase'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Total Web Engagement")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['Total_Web_Engagement'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Time as Customer")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['Customer_Since'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Total Web Engagement")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['Total_Web_Engagement'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Ratio of Total Spending on Wines")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioWines'] * 100, palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Ratio of Total Spending on Fruits")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioFruits'] * 100, palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Ratio of Total Spending on Meats")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioMeatProducts'] * 100, palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Ratio of Total Spending on Fish")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioFishProducts'] * 100, palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Ratio of Total Spending on Sweets")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioSweetProducts'] * 100, palette='tab10')
