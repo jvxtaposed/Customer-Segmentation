@@ -12,6 +12,7 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 import pandas as pd
 import matplotlib.pyplot as plot
+from scipy.stats import kruskal
 from sklearn import manifold
 from sklearn.manifold import Isomap
 from sklearn.cluster import AgglomerativeClustering
@@ -310,6 +311,10 @@ predicted_agc = agc.fit_predict(pca_dat)
 pca_agc = pca_dat.copy()
 pca_agc['cluster'] = predicted_agc
 
+pca_agc['cluster'].value_counts()
+pca_agc['cluster'].value_counts() / pca_agc['cluster'].value_counts().sum()
+
+
 #2d agglomerative
 plt.figure()
 sns.scatterplot(x="PC1", y="PC2", hue='cluster', data=pca_agc)
@@ -373,10 +378,6 @@ plt.title("Agglomerative Clusters: Time as Customer")
 sns.boxplot(x=pca_agc['cluster'], y=df_clean['Customer_Since'], palette='tab10')
 
 plt.figure()
-plt.title("Agglomerative Clusters: Total Web Engagement")
-sns.boxplot(x=pca_agc['cluster'], y=df_clean['Total_Web_Engagement'], palette='tab10')
-
-plt.figure()
 plt.title("Agglomerative Clusters: Ratio of Total Spending on Wines")
 sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioWines'] * 100, palette='tab10')
 
@@ -395,3 +396,46 @@ sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioFishProducts'] * 100, palette
 plt.figure()
 plt.title("Agglomerative Clusters: Ratio of Total Spending on Sweets")
 sns.boxplot(x=pca_agc['cluster'], y=df_clean['RatioSweetProducts'] * 100, palette='tab10')
+
+#count plots are better suited for binary indicators, try to distinguish any major differences
+plt.figure()
+plt.title("Agglomerative Clusters: Number of Total Accepted Campaigns")
+sns.countplot(x=df_clean['Total_Accepted_Campaign'], hue=pca_agc['cluster'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Education Status")
+sns.countplot(x=df_clean['Education'], hue=pca_agc['cluster'], palette='tab10')
+
+plt.figure()
+plt.title("Agglomerative Clusters: Married Status")
+sns.countplot(x=df_clean['Marital_Status'], hue=pca_agc['cluster'], palette='tab10')
+
+df_clean['cluster'] = pca_agc['cluster'].values
+#counting clusters may not be enough due to their differing size, although perhaps we should give more attention to bigger clusters
+def plot_percent_per_cluster_indicator(data, cluster, column, palette='tab10'):
+    df = data.copy()
+    df[cluster] = df[cluster].astype(str)  # Ensure clusters are categorical for plotting
+    count = df.groupby([cluster, column]).size().reset_index(name='count')
+    total = count.groupby(cluster)['count'].transform('sum')
+    count['percent'] = 100 * count['count'] / total
+    plt.figure(figsize=(8, 5))
+    sns.barplot(data=count, x=cluster, y="percent", hue=column, palette=palette)
+    plt.ylabel("Percent of Respondents")
+    plt.title(f"{column} Distribution by Cluster")
+    plt.tight_layout()
+    # print(df['cluster'].value_counts())
+    plt.show()
+plot_percent_per_cluster_indicator(df_clean, cluster='cluster', column='Education')
+plot_percent_per_cluster_indicator(df_clean, cluster='cluster', column='Marital_Status')
+plot_percent_per_cluster_indicator(df_clean, cluster='cluster', column='Response')
+plot_percent_per_cluster_indicator(df_clean, cluster='cluster', column='Total_Accepted_Campaign')
+# print(df_clean.shape)
+# print(pca_agc.shape)
+
+plt.figure()
+plt.title("Agglomerative Clusters: Age")
+sns.boxplot(x=pca_agc['cluster'], y=df_clean['Age'], palette='tab10')
+
+
+
+
